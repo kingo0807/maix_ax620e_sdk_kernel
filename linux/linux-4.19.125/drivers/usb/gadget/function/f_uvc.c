@@ -282,6 +282,10 @@ EXPORT_SYMBOL(uvc_set_trace_param);
  * Control requests
  */
 
+#define MSD_UVC_VENDOR_REQUEST		0x5a
+#define MSD_UVC_VENDOR_MIN_SIZE		32
+#define MSD_UVC_VENDOR_MAX_SIZE		60
+
 static void
 uvc_function_ep0_complete(struct usb_ep *ep, struct usb_request *req)
 {
@@ -306,13 +310,26 @@ uvc_function_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 	struct uvc_device *uvc = to_uvc(f);
 	struct v4l2_event v4l2_event;
 	struct uvc_event *uvc_event = (void *)&v4l2_event.u.data;
+	bool vendor_control_request;
 
 	/* printk(KERN_INFO "setup request %02x %02x value %04x index %04x %04x\n",
 	 *	ctrl->bRequestType, ctrl->bRequest, le16_to_cpu(ctrl->wValue),
 	 *	le16_to_cpu(ctrl->wIndex), le16_to_cpu(ctrl->wLength));
 	 */
 
-	if ((ctrl->bRequestType & USB_TYPE_MASK) != USB_TYPE_CLASS) {
+	vendor_control_request =
+		(ctrl->bRequestType == (USB_DIR_IN | USB_TYPE_VENDOR |
+					   USB_RECIP_INTERFACE) ||
+		 ctrl->bRequestType == (USB_DIR_OUT | USB_TYPE_VENDOR |
+					   USB_RECIP_INTERFACE)) &&
+		le16_to_cpu(ctrl->wIndex) == uvc->control_intf &&
+		ctrl->bRequest == MSD_UVC_VENDOR_REQUEST &&
+		le16_to_cpu(ctrl->wValue) == 0 &&
+		le16_to_cpu(ctrl->wLength) >= MSD_UVC_VENDOR_MIN_SIZE &&
+		le16_to_cpu(ctrl->wLength) <= MSD_UVC_VENDOR_MAX_SIZE;
+
+	if ((ctrl->bRequestType & USB_TYPE_MASK) != USB_TYPE_CLASS &&
+	    !vendor_control_request) {
 		INFO(f->config->cdev, "invalid request type\n");
 		return -EINVAL;
 	}
